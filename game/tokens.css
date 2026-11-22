@@ -1,0 +1,24 @@
+/* סלט · THE GROUP GAMES — design tokens. Every color, size, shadow and duration lives here.
+   style.css reads only from these. Source: "סלט · אפיון שדרוג גרפי". */
+:root{
+  --felt:#123B2B; --felt-deep:#0b2418; --card:#164532; --card-hi:#1d5139;
+  --ivory:#FFF8EC; --dim:#c9d6c3; --gold:#E8B84A; --chip:#C62F3B;
+  --leaf:#2E9B4F; --wood:#2a1a0e; --ink:#1A1A1A;
+  --win:#8fe0a6; --loss:#ff8a8a;
+  --f-ui:"Rubik",system-ui,sans-serif; --f-brand:"Suez One",serif; --f-quote:"Frank Ruhl Libre",serif;
+  --fs-1:12px; --fs-2:14px; --fs-3:16px; --fs-4:20px; --fs-5:26px; --fs-6:40px; --fs-hero:64px;
+  --lh-body:1.35; --lh-head:1.1;
+  --r-1:10px; --r-2:16px; --r-3:24px; --sp:4px; --gutter:16px; --hit:44px;
+  --e-1:0 1px 0 rgba(255,248,236,.06) inset,0 6px 16px rgba(0,0,0,.28);
+  --e-2:0 1px 0 rgba(255,248,236,.08) inset,0 14px 30px rgba(0,0,0,.38);
+  --e-3:0 30px 70px rgba(0,0,0,.55);
+  --ease-out:cubic-bezier(.22,1,.36,1); --ease-in-out:cubic-bezier(.65,0,.35,1);
+  --ease-back:cubic-bezier(.34,1.56,.64,1); --ease-in:cubic-bezier(.55,0,1,.45);
+  --t-tap:120ms; --t-ui:240ms; --t-scene:420ms; --t-reveal:900ms; --t-moment:1600ms;
+  --grain:.03;
+  /* derived (still tokens): secondary text on cards, hairlines, medal metals, bet-chip colors */
+  --mute:#8fa898; --felt-mid:#0d2c20; --edge:#2b6249; --gold-hi:#ffe27a; --line:rgba(255,248,236,.07); --silver:#c7cdd3; --bronze:#c98a52;
+  --bc-100:var(--ivory); --bc-250:var(--chip); --bc-500:var(--leaf); --bc-1k:var(--ink); --bc-2k:var(--gold);
+}
+@media (min-width:768px){:root{--gutter:24px}}
+@media (prefers-reduced-motion:reduce){:root{--t-ui:0ms;--t-scene:200ms;--t-reveal:200ms;--t-moment:200ms}}
