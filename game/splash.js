@@ -97,6 +97,9 @@
       root.remove(); onDone();
     };
     root.addEventListener("click", () => finish(true));
+    // the chip spins in like the original opening (five full turns, slowing down) while it builds itself
+    const svgEl = root.querySelector(".s-chip svg");
+    if (!red() && svgEl) svgEl.animate([{ transform: "scale(.4) rotate(-1800deg)" }, { transform: "none" }], { duration: 3200, easing: "cubic-bezier(.12,.75,.25,1)", fill: "both" });
     const built = SalatChip.assemble(root.querySelector(".s-chip"), { onStep: (n) => !done && sfx[n] && sfx[n]() });
     await wait(red() ? 0 : 500); if (done) return;
     // "סלט" letter by letter, Suez One
