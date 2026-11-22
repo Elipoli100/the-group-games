@@ -54,7 +54,7 @@
 
   async function play({ onDone = () => {}, sound = true, copyright = "© פולצ׳ק הפקות 2026" } = {}) {
     style();
-    if (sound) { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); await Promise.race([ac.resume(), wait(250)]); } catch (e) { ac = null; } if (ac && ac.state !== "running") ac = null; }
+    if (sound) { try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {} try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); await Promise.race([ac.resume(), wait(250)]); } catch (e) { ac = null; } if (ac && ac.state !== "running") ac = null; }
     const root = document.createElement("div"); root.className = "salat-splash"; root.setAttribute("role", "img"); root.setAttribute("aria-label", "סלט");
     root.innerHTML = `<div class="s-chip"><div class="s-glow"></div>${SalatChip.svg()}</div><div class="s-word" aria-hidden="true"></div><p class="s-sub">THE GROUP GAMES</p><p class="s-copy"></p>`;
     root.querySelector(".s-copy").textContent = copyright;

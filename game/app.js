@@ -78,11 +78,27 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
 
   // ───────── sound (Web Audio, generated, no files) ─────────
   // ───────── SOUND: layered Web Audio synthesis (no files), routed through a casino-room reverb ─────────
+  // iPhone: Web Audio goes quiet when the ring/silent switch is on silent. Asking for the "playback" audio session
+  // (Safari 16.4+), plus one silent <audio> element started from a tap for older versions, makes the game sound like a video does.
+  let iosAudioDone = false;
+  function iosAudio() {
+    if (iosAudioDone) return; iosAudioDone = true;
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+    try {
+      const a = document.createElement("audio"); a.setAttribute("playsinline", ""); a.setAttribute("x-webkit-airplay", "deny"); a.loop = true; a.volume = 0.01; a.preload = "auto";
+      a.src = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="; // 0.1 s of silence
+      const p = a.play(); if (p && p.catch) p.catch(() => { iosAudioDone = false; });
+    } catch (e) { iosAudioDone = false; }
+  }
+  window.TGG_IOS_AUDIO = iosAudio;
   const SND = {
     ctx: null, out: null, wet: null, nbuf: null, musicTimer: null, rocket: null,
     init() {
-      if (this.ctx) { if (this.ctx.state === "suspended" && this.ctx.resume) this.ctx.resume().catch(() => {}); return; }
+      iosAudio();
+      // iPhone leaves the context "interrupted" (not only "suspended") after a call, a lock or a trip to another app: wake it on any tap
+      if (this.ctx) { if (this.ctx.state !== "running" && this.ctx.resume) this.ctx.resume().catch(() => {}); return; }
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      if (this.ctx.state !== "running") this.ctx.resume().catch(() => {});
       const c = this.ctx;
       const comp = c.createDynamicsCompressor(); comp.threshold.value = -9; comp.ratio.value = 12; comp.knee.value = 6; comp.attack.value = 0.002; comp.release.value = 0.15;
       this.master = c.createGain(); this.master.gain.value = 2.4; this.master.connect(comp).connect(c.destination);
@@ -210,7 +226,8 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       tickFn(); this.musicTimer = setInterval(tickFn, spb * 1000);
     },
   };
-  document.addEventListener("pointerdown", () => SND.init());
+  // iPhone only unlocks audio on a finished tap (touchend / click), not on the touch's start — listen to all three
+  ["pointerdown", "touchend", "click"].forEach((ev) => document.addEventListener(ev, () => SND.init(), { passive: true }));
 
   // ───────── helpers for rendering ─────────
   function playerById(v, id) { return v && v.players.find((p) => p.id === id); }
@@ -2348,7 +2365,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       anim.onfinish = () => { SND.play("reelStop"); pop(strip.parentElement); if (i === 2) { box.classList.remove("tease"); done(); } };
     });
   }
-  document.addEventListener("visibilitychange", () => { try { if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend(); else SND.ctx.resume(); } catch (e) {} });
+  document.addEventListener("visibilitychange", () => { try { if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend(); else SND.ctx.resume().catch(() => {}); } catch (e) {} }); // if the phone refuses here, the next tap wakes it (SND.init)
 
   // ───────── events ─────────
   function bind() {
