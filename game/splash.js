@@ -11,8 +11,16 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
   .s-chip{position:relative;width:min(56vw,240px);aspect-ratio:600/612;filter:drop-shadow(0 24px 40px rgba(0,0,0,.45))}
   .s-chip svg{width:100%;height:100%;display:block;overflow:visible}
-  .s-word{margin:28px 0 0;font:400 var(--fs-hero)/1 var(--f-brand);color:var(--ivory);display:flex;gap:2px;direction:rtl;min-height:1em}
-  .s-word span{display:inline-block;overflow:hidden}.s-word span i{display:inline-block;font-style:normal}
+  .s-word{margin:30px 0 0;display:flex;gap:10px;direction:rtl}
+  .s-word.shake{animation:sShake .45s var(--ease-in-out)}
+  @keyframes sShake{0%,100%{transform:none}20%{transform:translateX(-7px) rotate(-1.5deg)}40%{transform:translateX(7px) rotate(1.5deg)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
+  .s-win{position:relative;width:70px;height:84px;overflow:hidden;border-radius:var(--r-1);background:var(--felt-deep);
+    box-shadow:0 0 0 2px var(--gold),0 0 0 5px var(--wood),var(--e-2)}
+  .s-win::before,.s-win::after{content:"";position:absolute;left:0;right:0;height:32%;z-index:2;pointer-events:none}
+  .s-win::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.6),transparent)}.s-win::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.6),transparent)}
+  .s-strip{display:flex;flex-direction:column;will-change:transform}.s-strip.spin{filter:url(#vblur)}
+  .s-strip span{height:84px;line-height:84px;text-align:center;font:400 60px/84px var(--f-brand);color:var(--ivory)}
+  .s-win.hit{box-shadow:0 0 0 2px var(--gold),0 0 0 5px var(--wood),0 0 26px rgba(232,184,74,.55),var(--e-2)}
   .s-sub{margin:14px 0 0;font:500 var(--fs-1) var(--f-ui);letter-spacing:.42em;color:var(--gold);direction:ltr}
   .s-tap{margin-top:30px;font:500 var(--fs-3) var(--f-ui);color:var(--dim)}
   .s-copy{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom,0px));margin:0;font:400 var(--fs-1) var(--f-ui);color:var(--dim);opacity:.6}
@@ -36,6 +44,9 @@
     leaves: () => { tone(660, 0.12, "triangle", 0.06); tone(880, 0.12, "triangle", 0.05, null, 0.08); },
     tom: () => tone(520, 0.14, "sine", 0.12, 260),
     word: () => [784, 988, 1319].forEach((f, i) => tone(f, 0.3, "triangle", 0.07, null, i * 0.09)),
+    tick: () => tone(900, 0.03, "square", 0.025),
+    stop: () => tone(220, 0.12, "triangle", 0.1),
+    piu: () => tone(700, 0.45, "sawtooth", 0.06, 120),
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const red = () => window.M && M.reduced();
@@ -44,10 +55,30 @@
     style();
     if (sound) { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); await Promise.race([ac.resume(), wait(250)]); } catch (e) { ac = null; } if (ac && ac.state !== "running") ac = null; }
     const root = document.createElement("div"); root.className = "salat-splash"; root.setAttribute("role", "img"); root.setAttribute("aria-label", "סלט");
-    root.innerHTML = `<div class="s-chip">${SalatChip.svg()}</div><p class="s-word" aria-hidden="true">${"סלט".split("").map((c) => `<span><i>${c}</i></span>`).join("")}</p><p class="s-sub">THE GROUP GAMES</p><p class="s-copy"></p>`;
+    root.innerHTML = `<div class="s-chip">${SalatChip.svg()}</div><div class="s-word" aria-hidden="true"></div><p class="s-sub">THE GROUP GAMES</p><p class="s-copy"></p>`;
     root.querySelector(".s-copy").textContent = copyright;
     document.body.appendChild(root);
-    const letters = root.querySelectorAll(".s-word i"); letters.forEach((l) => (l.style.transform = "translateY(110%)"));
+    // "סלט" comes up like a slot machine: three reels; the third stops on ק first ("סלק"), shakes, then clicks over to ט
+    const POOL = "אבגדהוזחכמנעפצקרשת".split(""); const CELL = 84;
+    const plan = [["ס"], ["ל"], ["ט", "ק"]];
+    const reels = plan.map(([target, extra], i) => {
+      const cells = [""]; for (let k = 0; k < 12 + i * 3; k++) cells.push(POOL.filter((c) => c !== target && c !== extra)[(k * 7 + i * 5) % 16]);
+      if (extra) cells.push(extra); cells.push(target);
+      const win = document.createElement("div"); win.className = "s-win"; const strip = document.createElement("div"); strip.className = "s-strip";
+      strip.innerHTML = cells.map((c) => `<span>${c}</span>`).join(""); win.appendChild(strip); root.querySelector(".s-word").appendChild(win);
+      return { win, strip, n: cells.length, pos: 0 };
+    });
+    root.querySelector(".s-word").style.opacity = 0;
+    const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+    const spin = (r, to, ms) => new Promise((ok) => { // rolls to a cell, with a tick on every letter and a small bounce on the stop
+      const from = r.pos, t0 = performance.now(); let last = Math.floor(from); r.strip.classList.add("spin");
+      (function f(now) {
+        if (done) return ok(); const p = Math.min(1, (now - t0) / ms); const k = easeOut(p); const pos = from + (to - from) * k;
+        r.strip.style.transform = `translateY(${-pos * CELL}px)`; if (Math.floor(pos) !== last) { last = Math.floor(pos); sfx.tick(); }
+        if (p > 0.75) r.strip.classList.remove("spin");
+        if (p < 1) requestAnimationFrame(f); else { r.pos = to; sfx.stop(); r.strip.animate([{ transform: `translateY(${-to * CELL - 10}px)` }, { transform: `translateY(${-to * CELL}px)` }], { duration: 220, easing: M.ease("back") }); ok(); }
+      })(t0);
+    });
     const sub = root.querySelector(".s-sub"); sub.style.opacity = 0;
     let done = false;
     const finish = async (skip) => {
@@ -68,10 +99,18 @@
     await SalatChip.assemble(root.querySelector(".s-chip"), { onStep: (n) => !done && sfx[n] && sfx[n]() });
     if (done) return;
     // "סלט" letter by letter, Suez One
-    sfx.word();
-    letters.forEach((l, i) => l.animate([{ transform: "translateY(110%)" }, { transform: "none" }], { duration: 300, delay: i * 90, easing: M.ease("out"), fill: "forwards" }));
+    const word = root.querySelector(".s-word");
+    if (red()) { reels.forEach((r) => { r.pos = r.n - 1; r.strip.style.transform = `translateY(${-(r.n - 1) * CELL}px)`; }); word.style.opacity = 1; }
+    else {
+      word.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: M.T.ui(), easing: M.ease("out"), fill: "forwards" }); word.style.opacity = "";
+      await Promise.all(reels.map((r, i) => spin(r, i === 2 ? r.n - 2 : r.n - 1, 1000 + i * 380)));
+      if (done) return;
+      await wait(220); word.classList.add("shake"); sfx.piu(); await wait(480); word.classList.remove("shake");
+      await spin(reels[2], reels[2].n - 1, 300); if (done) return;
+    }
+    reels.forEach((r, i) => setTimeout(() => r.win.classList.add("hit"), i * 70)); sfx.word();
     sub.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 300, delay: 300, easing: M.ease("out"), fill: "forwards" });
-    await wait(1300); finish(false);
+    await wait(1100); finish(false);
   }
   window.SalatSplash = { play, style };
 })();
