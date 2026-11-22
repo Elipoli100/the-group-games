@@ -296,7 +296,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       const pt = practice && A.playtest; const bank = loadBank();
       const onlyIds = pt && A.onlyNew ? bank.filter((q) => !getEdits().status[q.id]).map((q) => q.id) : null;
       HOST.state = TGG.newState({ room, questions: bank, now: Date.now(), practice, solo: A.solo !== false, length: A.length, playtest: pt, noTimer: pt && A.noTimer, onlyIds });
-      if (!pt) HOST.state.seen = LS.get("tgg_seen", []);
+      if (!pt) HOST.state.seen = A.posing ? [] : LS.get("tgg_seen", []);
     }
     HOST.test = !!practice; LS.set(practice ? "tgg_test_host" : "tgg_host", { room, practice });
     clearInterval(HOST.loop);
@@ -425,7 +425,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
   // ═════ CLOUD LEADERBOARD (a Google Sheet behind an Apps Script web app) ═════
   const CLOUD = window.TGG_CLOUD || ""; const BOARD = { games: null, at: 0, loading: false, err: false };
   function cloudPost(rec) {
-    if (!CLOUD) return; const q = LS.get("tgg_cloud_q", []); if (!q.some((x) => x.key === rec.key)) q.push(rec); LS.set("tgg_cloud_q", q.slice(-20)); cloudFlush();
+    if (!CLOUD || A.posing) return; const q = LS.get("tgg_cloud_q", []); if (!q.some((x) => x.key === rec.key)) q.push(rec); LS.set("tgg_cloud_q", q.slice(-20)); cloudFlush();
   }
   function cloudFlush() {
     if (!CLOUD) return; const q = LS.get("tgg_cloud_q", []); if (!q.length) return;
@@ -435,7 +435,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     }).catch(() => {});
   }
   function loadBoard(force) {
-    if (!CLOUD || BOARD.loading || (!force && BOARD.games && Date.now() - BOARD.at < 60000)) return;
+    if (!CLOUD || A.posing || BOARD.loading || (!force && BOARD.games && Date.now() - BOARD.at < 60000)) return;
     BOARD.loading = true;
     fetch(CLOUD + (CLOUD.includes("?") ? "&" : "?") + "t=" + Date.now()).then((r) => r.json()).then((d) => { BOARD.games = (d && d.games) || []; BOARD.err = false; })
       .catch(() => { BOARD.err = true; }).then(() => { BOARD.at = Date.now(); BOARD.loading = false; if (["home", "game"].includes(A.screen)) render(); });
@@ -525,7 +525,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     return `<div class="rv"><span class="rv-ic">${ic(kind === "score" ? "star" : "coin")}</span><div class="grow">${t}${x.isPB ? ` <span class="badge gold">שיא אישי חדש</span>` : x.first ? ` <span class="badge">נכנסת לטבלה</span>` : ""}</div>${x.passed.length ? `<span class="rv-f">${faces(x.passed)}</span>` : ""}</div>`;
   }
   function recordGame(v) {
-    const s = HOST.state; if (!s || !v || v.phase !== "game_over" || v.playtest) return;
+    const s = HOST.state; if (!s || !v || v.phase !== "game_over" || v.playtest || A.posing) return;
     const key = s.room + ":" + (s.startedAt || 0); const h = history(); if (h.some((x) => x.key === key)) return;
     const S = soloStats(v); h.unshift({ key, at: Date.now(), name: S.me.name, char: S.me.id, score: S.score, coins: S.me.coins, profit: S.profit, correct: S.correct, total: S.total });
     LS.set(HIST_KEY, h.slice(0, 30));
@@ -1059,7 +1059,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     ];
   }
   // a short "get ready" before the first question, so the clock doesn't start the moment you tap
-  function startCountdown(go, title) {
+  function startCountdown(go, title, still) {
     if ($(".cdwrap")) return; const w = document.createElement("div"); w.className = "cdwrap";
     w.innerHTML = `<div class="cdbox"><p class="cd-t">${title || "מתכוננים לשאלה הראשונה"}</p>
       <div class="cd-ring"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="cd-track" cx="100" cy="100" r="92"/><circle class="cd-arc" id="cdArc" cx="100" cy="100" r="92" pathLength="100"/></svg><div class="cd-n" id="cdN"></div></div>
@@ -1081,6 +1081,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       if (arc && n > 0 && arc.animate) arc.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: 100 }], { duration: 1000, easing: "linear", fill: "forwards" });
       SND.play(n > 0 ? "tick" : "fanfare");
     };
+    if (still) { const el = $("#cdN", w); el.innerHTML = "<span>3</span>"; const arc = $("#cdArc", w); if (arc) arc.style.strokeDashoffset = 40; return; }
     show(); const iv = setInterval(() => { n--; show(); if (n === 0) setTimeout(() => finish(true), 600); }, 1000);
     w.onclick = (e) => { if (e.target.closest("[data-cd=skip]")) finish(false); };
   }
@@ -2207,6 +2208,70 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     if (tap) M.scene({ getBoundingClientRect: () => tap }); else if (app) M.anim(app, [{ opacity: 0 }, { opacity: 1 }], M.reduced() ? 200 : M.T.scene(), "inOut");
     if (!(v && A.screen === "game" && A.tab === "game")) M.enter(document.querySelectorAll("main > .card, main > section, .charpick > *, .board .brow"));
   }
+  // ═════ POSE (tests only, ?dev=2828): puts the game in a fixed state — no clocks, no randomness, no animation —
+  //   so a screen can be photographed identically before and after a change. Nothing is saved to history or the leaderboard.
+  //   __TGG_APP.pose("gate"|"home"|"claim"|"countdown"|"question"|"reveal"|"casino"|"break-sum"|"final"|"share"); pose(null) returns to the normal game.
+  const POSE = { saved: null, T0: Date.UTC(2026, 10, 22, 10, 0, 0) };
+  const POSES = ["gate", "home", "claim", "countdown", "question", "reveal", "casino", "break-sum", "final", "share"];
+  function pose(name) {
+    if (!/[?&]dev=2828(&|$)/.test(location.search)) return Promise.resolve("pose is available only with ?dev=2828");
+    if (name == null) { // back to normal: put the device's saved data back exactly as it was, and reload
+      if (POSE.saved) { localStorage.clear(); for (const [k, val] of Object.entries(POSE.saved)) localStorage.setItem(k, val); }
+      location.reload(); return Promise.resolve("restored");
+    }
+    if (!POSES.includes(name)) return Promise.resolve("unknown pose: " + name + " · " + POSES.join(", "));
+    if (!POSE.saved) {
+      POSE.saved = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); POSE.saved[k] = localStorage.getItem(k); }
+      Date.now = () => POSE.T0 + POSE.dt; // a frozen clock: question timers stand still (the driver below may step it on, the same way every time)
+      Element.prototype.animate = function () { const a = { finished: Promise.resolve(), cancel() {}, finish() {}, pause() {}, play() {}, playState: "finished" }; Object.defineProperty(a, "onfinish", { set(f) { if (f) f(); } }); return a; };
+      const st = document.createElement("style"); st.textContent = ".posing *,.posing *::before,.posing *::after{animation:none!important;transition:none!important;caret-color:transparent!important}"; document.head.appendChild(st);
+    }
+    POSE.dt = 0; let seed = 2828; Math.random = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    // the engine draws with crypto randomness; in a pose it gets the same seeded numbers every time
+    try { Object.defineProperty(window.crypto, "getRandomValues", { configurable: true, value: (arr) => { const bits = arr.BYTES_PER_ELEMENT * 8; for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * Math.pow(2, Math.min(bits, 32))); return arr; } }); } catch (e) {}
+    // a clean device and a clean app
+    localStorage.clear(); LS.set("tgg_guide_seen", true); LS.set("tgg_prefs", { sound: false, music: false, vol: 0, reduce: true });
+    Object.assign(prefs, { sound: false, music: false, reduce: true });
+    A.posing = true; document.body.classList.add("posing", "reduce");
+    clearInterval(A.soloTimer); if (HOST.loop) clearInterval(HOST.loop); HOST.loop = null; HOST.state = null; HOST.bank = null; BOARD.games = []; BOARD.at = POSE.T0; BOARD.err = false;
+    for (const k of Object.keys(A)) if (!["posing"].includes(k)) delete A[k];
+    Object.assign(A, { screen: "home", role: null, room: null, view: null, lobby: null, tab: "game", offset: 0, conn: "ok", ui: {}, lastPhaseKey: null, err: null, length: "solo" });
+    document.querySelectorAll(".salat-gate,.salat-splash,.cdwrap,.gdwrap,.modal,.overlay,.mfx,.fx,canvas.confetti,.posing-share,.toast").forEach((e) => e.remove());
+    // drive the real engine with actions, the way a player would
+    const v = () => A.view; let guard = 0;
+    const solo = () => { A.solo = true; A.practice = false; A.playtest = false; A.length = "solo"; hostStart("282828", false, false); A.screen = "claim"; A.ui = { claim: { char: "polchak", avatar: AVATARS[0] } }; };
+    const claim = () => { send("claim", { char: "polchak", avatar: AVATARS[0] }); A.screen = "game"; A.tab = "game"; };
+    const start = () => send("host", { action: "start" });
+    const answer = (right) => { const q = HOST.state.bank[v().round.q.id] || v().round.q; send("solo", { value: right ? q.correct_answer : null, bet: right ? Math.min(500, v().maxOwnBet || 0) : 0, think: 6000 }); };
+    const step = () => { // one move forward, whatever the phase is
+      const w = v(); if (!w) return;
+      if (w.phase === "answering") answer(w.round.n % 3 !== 2);
+      else if (w.phase === "roulette") { const ro = w.round.roulette; const r = ro && ro.done && ro.done[w.me] === undefined ? send("soloSkip") : { error: 1 };
+        if (r && r.error) { const key = w.round.n + ":" + w.phase; send("host", { action: "continue" }); if (v() && v().round && v().round.n + ":" + v().phase === key) { POSE.dt += 60000; hostTick(); } } } // a live game (crash) needs the clock to move on
+      else send("host", { action: "continue" });
+    };
+    const until = (ok) => { while (!ok(v()) && guard++ < 400) step(); };
+    if (name === "gate") { render(); window.SALAT_SPLASH && window.SALAT_SPLASH.gate && window.SALAT_SPLASH.gate(); }
+    else if (name === "home") render();
+    else { solo();
+      if (name === "claim") render();
+      else { claim(); render();
+        if (name === "countdown") startCountdown(() => {}, null, true);
+        else { start();
+          if (name === "reveal") { answer(true); }
+          else if (name === "casino") { until((w) => w.phase === "roulette"); A.breakIntro = { n: v().round.roulette.breakNo, seen: true }; }
+          else if (name === "break-sum") { until((w) => w.phase === "roulette"); send("soloSkip"); }
+          else if (name === "final" || name === "share") until((w) => w.phase === "game_over");
+          A.tlDone = v().round ? v().round.n : null; A.finSeq = null; render();
+        } } }
+    document.querySelectorAll(".toast").forEach((e) => e.remove()); // messages raised while driving the engine
+    window.scrollTo(0, 0);
+    const ready = document.fonts ? document.fonts.ready : Promise.resolve();
+    if (name !== "share") return ready.then(() => name);
+    return ready.then(() => shareImage(v())).then((b) => new Promise((ok) => { const r = new FileReader(); r.onload = () => {
+      const o = document.createElement("div"); o.className = "posing-share"; o.style.cssText = "position:fixed;inset:0;z-index:99999;background:var(--felt-deep);display:grid;place-items:center;padding:16px";
+      o.innerHTML = `<img src="${r.result}" alt="" style="width:100%;max-width:540px;border-radius:12px">`; document.body.appendChild(o); const im = o.querySelector("img"); (im.complete ? Promise.resolve() : new Promise((d) => (im.onload = d))).then(() => ok(name)); }; r.readAsDataURL(b); }));
+  }
   // the casino break opens with a light curtain: the screen goes dark and one lamp comes on over the table
   function breakCurtain() {
     const v = A.view; const ro = v && v.round && v.round.roulette; if (!ro || v.phase !== "roulette" || A.tab !== "game") return;
@@ -2489,7 +2554,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     render();
   }
   window.addEventListener("beforeunload", (e) => { if (A.role === "host" && HOST.state && HOST.state.phase !== "game_over") { e.preventDefault(); e.returnValue = ""; } });
-  window.__TGG_APP = { A, HOST, send, render, hostLocal, SND, shareImage };
+  window.__TGG_APP = { A, HOST, send, render, hostLocal, SND, shareImage, pose };
   boot();
   setTimeout(cloudFlush, 1500);
 })();

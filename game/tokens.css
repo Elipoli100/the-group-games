@@ -19,6 +19,9 @@
   /* derived (still tokens): secondary text on cards, hairlines, medal metals, bet-chip colors */
   --mute:#8fa898; --felt-mid:#0d2c20; --edge:#2b6249; --gold-hi:#ffe27a; --line:rgba(255,248,236,.07); --silver:#c7cdd3; --bronze:#c98a52;
   --bc-100:var(--ivory); --bc-250:var(--chip); --bc-500:var(--leaf); --bc-1k:var(--ink); --bc-2k:var(--gold);
+  /* derived colours (second token pass) */
+  --chip-2:#a66f00; --chip-3:#8a5a00; --chip-4:#d81b78; --chip-5:#a3002a; --chip-6:#7d1a23; --chip-7:#7a1d26; --chip-8:#c9772e; --dev-accent:#4493f8; --dev-bg:#0b1117; --dev-dim:#8a9bab; --dev-dim2:#7a8ba3; --dev-err:#f85149; --dev-ink:#e6edf3; --dev-line:#2a3b4b; --dev-mid:#223140; --dev-ok:#3fb950; --dev-panel:#111a22; --dev-row:#17222c; --dev-warn:#d29922; --dim-2:#d8b8ff; --dim-3:#8ec5ff; --dim-4:#d6c4ff; --dim-5:#a5c8ff; --edge-2:#05556e; --edge-3:#3b2a68; --edge-4:#3b1d8f; --gold-2:#b8860b; --gold-3:#ffc21a; --gold-4:#e79b00; --ivory-2:#ffc2dd; --ivory-3:#dbe4ff; --leaf-2:#1fff1f; --leaf-3:#00e701; --loss-2:#ffb3bb; --loss-3:#ff6fb5; --loss-4:#ff9fb2; --mute-2:#7c4dff; --wood-2:#5a3a1c; --wood-3:#6b3a00; --wood-4:#6d0c40; --wood-5:#6b0714; --wood-6:#6b4500; --wood-7:#5a1010; --wood-8:#5c0e22;
+  --t-loop:3.2s; --t-spin:40s;
 }
 @media (min-width:768px){:root{--gutter:24px}}
-@media (prefers-reduced-motion:reduce){:root{--t-ui:0ms;--t-scene:200ms;--t-reveal:200ms;--t-moment:200ms}}
+@media (prefers-reduced-motion:reduce){:root{--t-ui:0ms;--t-scene:200ms;--t-reveal:200ms;--t-moment:200ms;--t-loop:0s;--t-spin:0s}}

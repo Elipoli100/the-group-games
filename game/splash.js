@@ -127,7 +127,6 @@
   let busy = false;
   const run = (sound) => { if (busy) return; busy = true; window.SalatSplash.play({ sound, onDone: () => { busy = false; } }); };
   window.SALAT_SPLASH = { play: () => run(soundOn()) };
-  if (seen) return;
   const mount = () => {
     const g = document.createElement("div"); g.className = "salat-gate"; g.setAttribute("role", "button"); g.setAttribute("aria-label", "הקש כדי להתחיל");
     g.innerHTML = `<div class="s-chip">${window.SALAT_CHIP_SVG}</div><p class="s-tap">הקש כדי להתחיל</p>`;
@@ -135,5 +134,7 @@
     g.onclick = () => { g.onclick = null; run(soundOn()); setTimeout(() => g.remove(), 60); };
   };
   window.SalatSplash.style();
+  window.SALAT_SPLASH.gate = mount; // pose("gate") for tests
+  if (seen) return;
   mount();
 })();
