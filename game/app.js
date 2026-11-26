@@ -321,13 +321,14 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     hostChanged();
   }
   function saveHost() {
-    const s = HOST.state; if (!s) return;
+    const s = HOST.state; if (!s || s.demoRun) return; // the practice round is never saved
     const { bank, ...rest } = s; LS.set(s.practice || HOST.test ? "tgg_test_host_state" : "tgg_host_state", rest); // test games never overwrite a real one
   }
   function hostChanged() {
     const s = HOST.state; if (!s) return; const t = Date.now();
     const mine = Object.values(s.players).find((p) => p.token === token);
     A.view = mine ? TGG.view(s, mine.id, t) : null;
+    if (s.demoRun && A.view && A.view.phase === "game_over") { endPractice(); return; }
     saveHost(); if (A.view && A.view.phase === "game_over") recordGame(A.view); onView();
   }
   function hostTick() {
@@ -424,7 +425,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     else if (A.screen === "claim" || (A.screen === "game" && !A.view)) body = renderClaim();
     else body = renderGameShell();
     app.innerHTML = body;
-    bind(); if (A.inspector || $("#insp")) updateInspector();
+    bind(); practiceTag(); if (A.inspector || $("#insp")) updateInspector();
     if (focus) { const el = document.getElementById(focus); if (el) { el.focus(); try { if (sel != null) el.setSelectionRange(sel, sel); } catch (e) {} } }
     afterRender(); sceneEnter();
   }
@@ -542,7 +543,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
     return `<div class="rv"><span class="rv-ic">${ic(kind === "score" ? "star" : "coin")}</span><div class="grow">${t}${x.isPB ? ` <span class="badge gold">שיא אישי חדש</span>` : x.first ? ` <span class="badge">נכנסת לטבלה</span>` : ""}</div>${x.passed.length ? `<span class="rv-f">${faces(x.passed)}</span>` : ""}</div>`;
   }
   function recordGame(v) {
-    const s = HOST.state; if (!s || !v || v.phase !== "game_over" || v.playtest || A.posing) return;
+    const s = HOST.state; if (!s || !v || v.phase !== "game_over" || v.playtest || A.posing || s.demoRun) return;
     const key = s.room + ":" + (s.startedAt || 0); const h = history(); if (h.some((x) => x.key === key)) return;
     const S = soloStats(v); h.unshift({ key, at: Date.now(), name: S.me.name, char: S.me.id, score: S.score, coins: S.me.coins, profit: S.profit, correct: S.correct, total: S.total });
     LS.set(HIST_KEY, h.slice(0, 30));
@@ -1038,6 +1039,70 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
 
   // ───────── THE GUIDE: before the game, step by step ─────────
   // ═════ THE GUIDE: short, visual, with a real demo question to try ═════
+
+  // ───────── PRACTICE ROUND: 5 silly questions, one per answer type, before the real 25. Not saved, not scored. ─────────
+  const DQ = (o) => Object.assign({ chapter: 1, chapter_name: "אימון", explanation: "", original_quote: null, source_date: null, reveal_asset: "group", interpretive: false, kind: "fact", confidence: "high", sensitivity: { level: "safe", display_ok: true, note: null }, demo: true }, o);
+  const PRACTICE_BANK = [
+    DQ({ id: "DEMO-1", mode: "WHO_IS_MORE_LIKELY", difficulty: "EASY", level: 1, score_value: 100, time_limit: 30, answer_type: "choice",
+      prompt: "איזה צבע הכי אהוב על חבורת סלט?",
+      options: [{ id: "a", text: "ירוק" }, { id: "b", text: "סגול" }, { id: "c", text: "כתום" }, { id: "d", text: "בז׳" }], correct_answer: "a",
+      explanation: "ירוק, כמו סלט. מה ציפית? (שאלת בחירה: בוחרים תשובה אחת)" }),
+    DQ({ id: "DEMO-2", mode: "NUMBERS_GAME", difficulty: "MEDIUM", level: 2, score_value: 150, time_limit: 31, answer_type: "number",
+      prompt: "כמה רגליים יש לתמנון?", options: null, correct_answer: 8, close_ratio: 0.8,
+      numeric: { answer: 8, unit: "רגליים", scoring_bands: [{ within_pct: 0, points_pct: 100 }, { within_pct: 15, points_pct: 80 }, { within_pct: 30, points_pct: 50 }, { within_pct: 60, points_pct: 20 }], over_under_line: 6 },
+      explanation: "8. בשאלת מספר בוחרים טווח על הסרגל: טווח צר יותר = מכפיל גבוה יותר." }),
+    DQ({ id: "DEMO-3", mode: "WHO_SAID_WHAT", difficulty: "MEDIUM", level: 2, score_value: 150, time_limit: 33, answer_type: "matching",
+      prompt: "התאימו כל חיה לקול שלה.",
+      options: [{ id: "a", text: "כלב" }, { id: "b", text: "חתול" }, { id: "c", text: "פרה" }, { id: "d", text: "תרנגול" }],
+      match_targets: [{ id: "bark", text: "הב הב" }, { id: "meow", text: "מיאו" }, { id: "moo", text: "מווו" }, { id: "kuku", text: "קוקוריקו" }],
+      correct_answer: { a: "bark", b: "meow", c: "moo", d: "kuku" }, explanation: "שאלת התאמה: לכל שורה בוחרים בעלים." }),
+    DQ({ id: "DEMO-4", mode: "RANK_THEM", difficulty: "HARD", level: 3, score_value: 200, time_limit: 33, answer_type: "ranking",
+      prompt: "דרגו מהכי כבד לכי קל.",
+      options: [{ id: "a", text: "פיל" }, { id: "b", text: "סוס" }, { id: "c", text: "חתול" }, { id: "d", text: "נמלה" }], correct_answer: ["a", "b", "c", "d"],
+      explanation: "פיל, סוס, חתול, נמלה. שאלת דירוג: מקישים לפי הסדר, מהמקום הראשון." }),
+    DQ({ id: "DEMO-5", mode: "GUESS_THE_TIMELINE", difficulty: "EASY", level: 1, score_value: 100, time_limit: 33, answer_type: "order",
+      prompt: "סדרו לפי הסדר: איך נגמרת כל תוכנית של החבורה?",
+      options: [{ id: "a", text: "מישהו מציע מסיבה" }, { id: "b", text: "כולם כותבים “אשששש”" }, { id: "c", text: "מישהו מבריז" }, { id: "d", text: "נשארים במרפסת" }], correct_answer: ["a", "b", "c", "d"],
+      explanation: "קלאסיקה. שאלת ציר זמן: מקישים מהמוקדם למאוחר. זו גם שאלת הגמר של האימון, אז ההימור המקסימלי גבוה יותר." }),
+  ];
+  function practiceOn() { return !!(HOST.state && HOST.state.demoRun); }
+  function startPractice() {
+    const real = HOST.state; if (!real) return; const me = Object.values(real.players).find((p) => p.token === token); if (!me) return;
+    const d = TGG.newState({ room: real.room + "-practice", questions: PRACTICE_BANK, now: Date.now(), practice: true, solo: true, length: "all" });
+    d.demoRun = true; TGG.join(d, Date.now(), { token, char: me.id, avatar: me.avatar, isHost: true });
+    HOST.real = real; HOST.state = d; A.lastPhaseKey = null; A.ui = {};
+    startCountdown(() => { TGG.start(HOST.state, Date.now()); hostChanged(); }, "סבב אימון: 5 שאלות מטומטמות");
+    hostChanged();
+  }
+  function endPractice(skipCountdown) {
+    if (!HOST.real) return; const d = HOST.state; const me = d && Object.values(d.players).find((p) => p.token === token);
+    const n = d && d.rounds ? d.rounds.length : 0; const right = me ? me.stats.correct : 0; const coins = me ? me.coins - TGG.START_COINS : 0;
+    HOST.state = HOST.real; HOST.real = null; A.practiceDone = HOST.state.room; A.lastPhaseKey = null; A.ui = {}; document.querySelectorAll(".demotag").forEach((e) => e.remove());
+    hostChanged();
+    const go = () => startCountdown(() => send("host", { action: "start" }), "עכשיו זה אמיתי");
+    if (skipCountdown) return go();
+    modal(`<h2>האימון נגמר</h2><p class="gd-p">צדקת ב-${right} מתוך ${n || 5}${coins ? `, ו${coins > 0 ? "הרווחת" : "הפסדת"} ${fmt(Math.abs(coins))} מטבעות` : ""}. זה לא נספר.</p>
+      <p class="gd-p small">היתרה חוזרת ל-10,000, ועכשיו מתחילות 25 השאלות האמיתיות על החבורה.</p>
+      <div class="col" style="margin-top:14px"><button class="btn gold big" id="pGo">${ic("play")} יאללה, למשחק האמיתי</button></div>`,
+      (m) => { $("#pGo", m).onclick = () => { m.remove(); SND.play("correct"); go(); }; m.onclick = null; });
+  }
+  // every solo start goes through here: offer the practice round first
+  function launchSolo() {
+    const v = A.view; const realStart = () => startCountdown(() => send("host", { action: "start" }));
+    if ($(".cdwrap") || $(".modal #pGo") || $(".modal #pYes")) return; // a countdown or a choice is already on screen
+    if (A.practiceDone && v && v.room === A.practiceDone) return realStart(); // already practised in this game
+    if (!v || !v.solo || v.playtest || practiceOn()) return realStart();
+    modal(`<h2>לפני שמתחילים</h2><p class="gd-p">רוצה סבב אימון? 5 שאלות מטומטמות, אחת מכל סוג: בחירה, מספר, התאמה, דירוג וציר זמן. מהמרים כמו באמת, אבל כלום לא נספר.</p>
+      <div class="col" style="margin-top:14px"><button class="btn gold big" id="pYes">${ic("play")} סבב אימון</button><button class="btn ghost" id="pNo">ישר למשחק האמיתי</button></div>`,
+      (m) => { $("#pYes", m).onclick = () => { m.remove(); SND.play("tap"); startPractice(); }; $("#pNo", m).onclick = () => { m.remove(); SND.play("tap"); realStart(); }; });
+  }
+  function practiceTag() {
+    let t = document.querySelector(".demotag");
+    if (!practiceOn() || A.screen !== "game") { if (t) t.remove(); return; }
+    if (!t) { t = document.createElement("div"); t.className = "demotag"; t.style.cssText = "position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:60;background:var(--gold,#e8b84a);color:#1a1200;font:700 12px/1 Rubik,sans-serif;padding:6px 12px;border-radius:999px;box-shadow:0 2px 10px #0006;pointer-events:auto";
+      t.innerHTML = `סבב אימון · לא נספר <button style="all:unset;margin-inline-start:8px;text-decoration:underline;cursor:pointer" id="pSkip">דלג</button>`; document.body.appendChild(t);
+      t.querySelector("#pSkip").onclick = () => endPractice(true); }
+  }
   const DEMO_Q = { prompt: "של מי הכינוי “מוצרלה” בחבורה?", answer: "mozzarella", opts: ["polchak", "tego", "mozzarella", "yoni"], names: { polchak: "פולצ׳ק", tego: "טגו", mozzarella: "דוד", yoni: "יוני" } };
   function demoQuestion() {
     const g = A.guide || {}; const pick = g.demoPick; const bet = g.demoBet || 0; const L = 2, mult = TGG.SOLO.MULT[L];
@@ -1120,7 +1185,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       if (a === "demoReset") { g.demoPick = null; g.demoBet = 0; SND.play("tap"); renderGuide(); return; }
       SND.play("tap");
       if (a === "next") { g.i++; renderGuide(); } else if (a === "prev") { g.i--; renderGuide(); }
-      else { w.remove(); A.guide = null; if (A.view && A.view.room !== "demo" && HOST.state && !A.free) { LS.set("tgg_guide_" + A.view.room, true); LS.set("tgg_guide_seen", true); send("ready", { on: true }); } if (a === "done") { SND.play("correct"); if (A.view && A.view.solo && A.view.phase === "lobby" && A.view.isHost) { render(); startCountdown(() => send("host", { action: "start" })); return; } } render(); }
+      else { w.remove(); A.guide = null; if (A.view && A.view.room !== "demo" && HOST.state && !A.free) { LS.set("tgg_guide_" + A.view.room, true); LS.set("tgg_guide_seen", true); send("ready", { on: true }); } if (a === "done") { SND.play("correct"); if (A.view && A.view.solo && A.view.phase === "lobby" && A.view.isHost) { render(); launchSolo(); return; } } render(); }
     };
     if (g.lastI !== g.i) { $(".gdbody", w).scrollTop = 0; g.lastI = g.i; }
   }
@@ -2414,7 +2479,7 @@ window.addEventListener("DOMContentLoaded",function(){ /* THE GROUP GAMES — UI
       case "claim": { const c = ui.claim; if (c && c.char) LS.set("tgg_last_char", c.char); const r = send("claim", { char: c.char, avatar: c.avatar }); if (A.role !== "guest") { if (r && r.pid) { A.screen = "game"; SND.play("lock"); setTimeout(() => { const w = A.view; if (w && !w.playtest && w.phase === "lobby" && !$(".gdwrap") && !LS.get("tgg_guide_seen", false)) openGuide(true); }, 300); } render(); } break; }
       case "tab": A.tab = val; SND.play("tap"); render(); window.scrollTo(0, 0); break;
       case "start": {
-        startCountdown(() => send("host", { action: "start" }));
+        launchSolo();
         break;
       }
       case "host": {
